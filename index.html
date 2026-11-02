@@ -761,6 +761,10 @@ const au=makeEngine();
 /* storage: IndexedDB (с запасным вариантом — только память) */
 const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('offline-player',1);r.onupgradeneeded=()=>r.result.createObjectStore('t',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 const tx=(mode,fn)=>new Promise(async(res,rej)=>{try{db=db||await idb();const t=db.transaction('t',mode),r=fn(t.objectStore('t'));t.oncomplete=()=>res(r&&r.result);t.onerror=t.onabort=()=>rej(t.error)}catch(e){rej(e)}});
+/* избранное хранится отдельно (localStorage): не перезаписываем файл целиком ради сердечка */
+const FAVK='favs';
+function favSave(){try{localStorage.setItem(FAVK,JSON.stringify(tracks.filter(x=>x.fav).map(x=>x.id)))}catch(e){console.error('favs:',e)}}
+function favApply(){try{const r=localStorage.getItem(FAVK);if(r===null)return;const a=new Set(JSON.parse(r));tracks.forEach(x=>{x.fav=a.has(x.id)})}catch(e){}}
 async function put(t){try{await tx('readwrite',s=>s.put(t))}catch(e){console.error('IndexedDB put:',e);toast('Не удалось сохранить данные в браузере')}}
 async function rm(id){try{await tx('readwrite',s=>s.delete(id))}catch(e){console.error('IndexedDB delete:',e);toast('Не удалось удалить файл из хранилища')}}
 async function loadAll(){try{return(await tx('readonly',s=>s.getAll()))||[]}catch(e){console.error('IndexedDB load:',e);toast('Не удалось открыть хранилище');return[]}}
@@ -929,7 +933,7 @@ function burst(btn){
 /* events */
 $('#list').onclick=e=>{
  const f=e.target.closest('[data-f]'),m=e.target.closest('[data-m]'),d=e.target.closest('[data-d]'),y=e.target.closest('[data-y]'),n=e.target.closest('[data-n]'),r=e.target.closest('.row');
- if(f){const i=+f.dataset.f,t=tracks[i];t.fav=!t.fav;put(t);render();if(i===cur)drawPlayer();if(t.fav)burst(document.querySelector('#list [data-f="'+i+'"]'));return}
+ if(f){const i=+f.dataset.f,t=tracks[i];t.fav=!t.fav;favSave();render();if(i===cur)drawPlayer();if(t.fav)burst(document.querySelector('#list [data-f="'+i+'"]'));return}
  if(m){openMenu=+m.dataset.m;render();return}
  if(n){confirmDel=null;openMenu=null;render();return}
  if(d){confirmDel=+d.dataset.d;openMenu=null;render();return}
@@ -957,7 +961,7 @@ $('#prev').onclick=()=>{au.currentTime>3?au.currentTime=0:step(-1)};
 $('#next').onclick=()=>step(1);
 $('#shuf').onclick=()=>{shuffle=!shuffle;drawCtl()};
 $('#rep').onclick=()=>{rep=(rep+1)%3;drawCtl()};
-$('#fav').onclick=()=>{const t=tracks[cur];if(!t)return;t.fav=!t.fav;put(t);drawPlayer();render();if(t.fav)burst($('#fav'))};
+$('#fav').onclick=()=>{const t=tracks[cur];if(!t)return;t.fav=!t.fav;favSave();drawPlayer();render();if(t.fav)burst($('#fav'))};
 $('#mini').onclick=()=>{$('#stage').dataset.view='player'};
 $('#back').onclick=()=>{$('#stage').dataset.view='lib'};
 {const w=$('#wave');
@@ -1112,7 +1116,7 @@ sm.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;sortBy=b.datase
 document.addEventListener('click',e=>{if(!sm.hidden&&!e.target.closest('.sortw'))closeSort()});
 addEventListener('keydown',e=>{if(e.key==='Escape'&&!sm.hidden)closeSort()});
 
-(async()=>{tracks=await loadAll();tracks.sort((a,b)=>(a.added||a.id)-(b.added||b.id));render();drawPlayer();drawCtl()})();
+(async()=>{tracks=await loadAll();favApply();tracks.sort((a,b)=>(a.added||a.id)-(b.added||b.id));render();drawPlayer();drawCtl()})();
 })();
 </script>
 <script>if('serviceWorker' in navigator&&!window.Capacitor)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script>
