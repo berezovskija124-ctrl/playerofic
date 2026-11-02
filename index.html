@@ -657,7 +657,7 @@ async function convert(t){
  return new Blob([d],{type:'audio/flac'})}
 async function transcode(t){
  try{t.play=await convert(t);put(t);if(tracks[cur]!==t)return;delete urls[t.id];play(cur)}
- catch(e){console.error('Transcode:',e);toast(e.code==='NOFF'?'Формат «'+(extOf(t)||'?')+'» этот браузер не воспроизводит. Нужен декодер: npm run vendor (см. README)':'Не удалось конвертировать файл')}}
+ catch(e){console.error('Transcode:',e);toast(e.code==='NOFF'?(/^(mp3|m4a|aac|wav|ogg|opus|flac)$/.test(extOf(t)||'')?'Не удалось воспроизвести «'+t.title+'». Файл может быть повреждён: удалите его и добавьте заново.':'Формат «'+(extOf(t)||'?')+'» этот браузер не воспроизводит. Нужен декодер: npm run vendor (см. README)'):'Не удалось конвертировать файл')}}
 /*TAGS-END*/
 
 /*ENGINE-START*/
@@ -719,9 +719,11 @@ function makeEngine(){
   buf=b;off=0;fire('onloadedmetadata');
   if(ctx.state==='suspended')await ctx.resume()};
  return E}
+const dataTried=new Set();
 async function waPlay(t){
  try{await au.useBuffer(srcBlob(t));if(tracks[cur]!==t)return;waMode=true;await au.play()}
  catch(e){console.error('WebAudio:',e);if(tracks[cur]!==t)return;
+  if(!dataTried.has(t.id)&&!t.play){dataTried.add(t.id);toData(t);return}
   if(!t.play&&!MIDI.test((t.blob&&t.blob.name)||'')&&!conv.has(t.id)){conv.add(t.id);transcode(t)}else toast('Не удалось воспроизвести файл')}}
 /*ENGINE-END*/
 
