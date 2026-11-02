@@ -213,6 +213,23 @@ button:active{scale:1.09}
 .shead h3{margin:0;font-size:22px;font-weight:600}
 .shead .glass{width:40px;height:40px}
 .sec{padding:16px 0;border-top:1px solid rgba(255,255,255,.12)}
+.legal{padding:16px 0 8px;border-top:1px solid rgba(255,255,255,.12);font-size:13px;color:rgba(255,255,255,.6)}
+.legal nav{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:10px}
+.legal button{background:none;border:0;padding:4px 0;font:inherit;color:#fff;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,.3);text-underline-offset:3px}
+.legal p{margin:0 0 6px;line-height:1.5}
+#lg{position:fixed;inset:0;z-index:300;display:none;align-items:flex-end;justify-content:center;background:rgba(5,5,20,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+#lg.on{display:flex}
+#lg .lgp{width:min(640px,100%);max-height:88%;overflow:auto;-webkit-overflow-scrolling:touch;background:rgba(36,38,62,.96);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:30px 30px 0 0;padding:22px 22px calc(28px + env(safe-area-inset-bottom,0px))}
+@media(min-width:700px){#lg{align-items:center}#lg .lgp{border-radius:30px;max-height:84%}}
+#lg .lgh{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+#lg h3{margin:0;font-size:20px}
+#lg .lgx{width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.14);color:#fff;font-size:20px;cursor:pointer}
+#lg h5{margin:16px 0 4px;font-size:15px}
+#lg p,#lg li{font-size:14px;line-height:1.55;color:rgba(255,255,255,.82);margin:0 0 8px}
+#lg ul{margin:0 0 8px;padding-left:20px}
+#lg a{color:#9ec2ff}
+html[data-theme=light] .legal{border-color:rgba(20,20,40,.1);color:rgba(20,20,40,.6)}
+html[data-theme=light] .legal button{color:#15151d;text-decoration-color:rgba(20,20,40,.3)}
 .sec:first-of-type{border-top:0}
 .sec h4{margin:0 0 10px;font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
 .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.sh h4{margin:0}
@@ -412,7 +429,7 @@ html[data-theme=light] body{background:#eef1fb}
 .tgt small{font-size:12.5px;opacity:.7}
 html[data-theme=light] .tglink{background:rgba(255,255,255,.7);border-color:rgba(20,20,40,.14);box-shadow:inset 0 1px 0 #fff}
 </style>
-<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#171830"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Плеер"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="icon-192.png"></head>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#171830"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Плеер"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="pc-192.png"></head>
 <body>
 <main class="stage" data-view="lib" id="stage">
 <input type="file" id="file" accept="audio/*,.mp3,.m4a,.m4b,.aac,.wav,.wave,.aif,.aiff,.aifc,.flac,.alac,.caf,.ape,.wma,.wv,.ogg,.oga,.opus,.spx,.dsf,.dff,.mid,.midi,.kar,.amr,.awb,.mqa,.mka,.ac3,.mpc" multiple hidden>
@@ -485,8 +502,15 @@ html[data-theme=light] .tglink{background:rgba(255,255,255,.7);border-color:rgba
     <span class="tgt"><b>Написать в Telegram</b><small>Вопросы, ошибки, идеи — отвечу лично</small></span>
    </a>
   </section>
+  <div class="legal">
+   <nav aria-label="Документы"><button type="button" data-lg="terms">Пользовательское соглашение</button><button type="button" data-lg="privacy">Политика конфиденциальности</button><button type="button" data-lg="help">Справка</button></nav>
+   <p>Плеер для личной музыки. Работает на вашем устройстве, ваши файлы никуда не отправляются.</p>
+   <p>Все права на музыку принадлежат её правообладателям. Добавляйте только то, чем вы вправе пользоваться.</p>
+   <p>© 2026 Плеер · Личный проект автора</p>
+  </div>
  </div>
 </div>
+<div id="lg" role="dialog" aria-modal="true" aria-labelledby="lgT"><div class="lgp"><div class="lgh"><h3 id="lgT"></h3><button type="button" class="lgx" id="lgX" aria-label="Закрыть">✕</button></div><div id="lgB"></div></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </main>
 
@@ -1116,6 +1140,17 @@ sm.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;sortBy=b.datase
 document.addEventListener('click',e=>{if(!sm.hidden&&!e.target.closest('.sortw'))closeSort()});
 addEventListener('keydown',e=>{if(e.key==='Escape'&&!sm.hidden)closeSort()});
 
+
+/* юридические окна */
+const LEGAL={
+terms:['Пользовательское соглашение','<p>Редакция от 2 ноября 2026 г. Используя плеер, вы соглашаетесь с этими условиями.</p><h5>1. Что это</h5><p>Плеер — бесплатное приложение для прослушивания ваших собственных аудиофайлов на вашем устройстве. Музыку он не предоставляет, не продаёт и не распространяет.</p><h5>2. Ваши файлы и авторские права</h5><ul><li>Вы добавляете только те файлы, которыми имеете право пользоваться (купленные, свои, лицензированные или свободные).</li><li>Ответственность за добавленные файлы и за соблюдение авторских прав лежит на вас.</li><li>Плеер не снимает защиту DRM и не скачивает музыку из интернета.</li></ul><h5>3. Хранение данных</h5><p>Файлы хранятся в памяти вашего браузера. Они могут пропасть, если вы очистите данные сайта, браузер удалит их при нехватке места или вы удалите приложение. Храните оригиналы файлов отдельно.</p><h5>4. Без гарантий</h5><p>Плеер предоставляется «как есть». Автор не гарантирует бесперебойную работу, поддержку всех форматов и устройств и не отвечает за потерю файлов или иной ущерб от использования.</p><h5>5. Обновления и изменения</h5><p>Плеер и эти условия могут меняться. Актуальная редакция всегда доступна в настройках плеера.</p><h5>6. Связь</h5><p>Вопросы и жалобы, в том числе от правообладателей, можно отправить автору в Telegram через кнопку «Написать в Telegram» в настройках.</p>'],
+privacy:['Политика конфиденциальности','<p>Редакция от 2 ноября 2026 г.</p><h5>Что мы не делаем</h5><ul><li>Нет регистрации и аккаунтов.</li><li>Мы не собираем ваши персональные данные, не ведём аналитику и не показываем рекламу.</li><li>Ваши файлы, обложки и картинки не загружаются на сервер и не передаются третьим лицам.</li></ul><h5>Что хранится на вашем устройстве</h5><p>В браузере сохраняются ваши треки с обложками, избранное, громкость, тема, фон библиотеки, настройки эквалайзера и сортировка. Это нужно только для работы плеера и остаётся у вас.</p><h5>Сеть</h5><p>Для загрузки и обновления плеера браузер обращается к сайту, где он размещён (GitHub Pages). Хостинг может вести технические журналы по собственным правилам. После установки плеер работает без интернета.</p><h5>Обращение в Telegram</h5><p>Если вы пишете автору в Telegram, переписка идёт по правилам Telegram. Автор использует её только для ответа вам.</p><h5>Как удалить данные</h5><p>Удалите трек в библиотеке через меню «⋯» или очистите данные сайта в настройках браузера. Тогда всё, что плеер хранил, будет стёрто.</p>'],
+help:['Справка','<h5>Как добавить музыку</h5><p>В библиотеке нажмите «Добавить» и выберите файлы. Можно выбрать сразу несколько.</p><h5>Как включить трек</h5><p>Нажмите на трек, он начнёт играть. Чтобы открыть полный плеер, нажмите на мини-плеер внизу.</p><h5>Избранное</h5><p>Нажмите на сердечко у трека. Вкладка «Избранное» покажет только отмеченные.</p><h5>Трек не играет</h5><p>Удалите его через «⋯» и добавьте заново. Если не помогло, проверьте, открывается ли файл в стандартном плеере телефона. Файлы с защитой DRM не воспроизводятся.</p><h5>Управление на экране блокировки</h5><p>На iPhone запускайте плеер с иконки на рабочем столе. На Android используйте Chrome.</p><h5>Установка</h5><p>iPhone: Safari → «Поделиться» → «На экран “Домой”». Android: меню ⋮ → «Установить приложение». Компьютер: значок установки в адресной строке Chrome или Edge.</p><h5>Связь с автором</h5><p>Кнопка «Написать в Telegram» в настройках.</p>']};
+(()=>{const o=$('#lg');
+ const close=()=>{o.classList.remove('on')};
+ document.addEventListener('click',e=>{const b=e.target.closest('[data-lg]');if(b){const d=LEGAL[b.dataset.lg];$('#lgT').textContent=d[0];$('#lgB').innerHTML=d[1];o.classList.add('on');o.querySelector('.lgp').scrollTop=0;return}
+  if(e.target===o||e.target.closest('#lgX'))close()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&o.classList.contains('on')){e.stopPropagation();close()}},true)})();
 (async()=>{tracks=await loadAll();favApply();tracks.sort((a,b)=>(a.added||a.id)-(b.added||b.id));render();drawPlayer();drawCtl()})();
 })();
 </script>
