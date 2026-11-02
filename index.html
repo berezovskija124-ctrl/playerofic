@@ -336,7 +336,12 @@ html[data-theme=light] .trk .knob{background:#fff;box-shadow:0 2px 10px rgba(20,
 @media(prefers-reduced-motion:reduce){.playing .row.cur .eqb i{animation:none;transform:scaleY(.7)}}
 .dur{flex:none;font-size:13px;color:rgba(255,255,255,.6);font-variant-numeric:tabular-nums}
 .ib.heart svg,.row .ib svg{width:22px;height:22px}
-.ib.heart.on{color:#ff7ab0}
+.ib.heart.on{color:#fff}
+.ib.pop svg{animation:hpop .45s cubic-bezier(.2,.9,.3,1.4)}
+@keyframes hpop{0%{transform:scale(.6)}45%{transform:scale(1.35)}100%{transform:scale(1)}}
+.hb{position:fixed;left:0;top:0;width:12px;height:12px;pointer-events:none;z-index:9999;will-change:transform,opacity}
+.hb svg{width:100%;height:100%;fill:currentColor;display:block}
+@media(prefers-reduced-motion:reduce){.ib.pop svg{animation:none}}
 .row .ib{padding:8px}
 .mini{position:relative;overflow:hidden;padding-bottom:14px}
 .mini .mb{width:40px;height:40px;padding:0;display:grid;place-items:center;border-radius:50%;flex:none}
@@ -363,7 +368,7 @@ html[data-theme=light] .sortw .glass.on{background:#15151d;color:#fff}
 html[data-theme=light] .menu{background:rgba(255,255,255,.96);color:#15151d;border-color:rgba(20,20,40,.12);box-shadow:0 18px 40px rgba(30,30,70,.25)}
 html[data-theme=light] .menu button:hover{background:rgba(20,20,40,.07)}
 html[data-theme=light] .dur{color:rgba(20,20,35,.6)}
-html[data-theme=light] .ib.heart.on{color:#e0356f}
+html[data-theme=light] .ib.heart.on{color:#15151d}
 html[data-theme=light] .mprog{background:rgba(20,20,40,.15)}
 html[data-theme=light] .mprog i{background:#15151d}
 html[data-theme=light].cw .seg2,html[data-theme=light].cw .act:not(.main){background:rgba(255,255,255,.7)}
@@ -902,10 +907,27 @@ function render(){
   <button class="ib heart${t.fav?' on':''}" data-f="${i}" aria-label="${t.fav?'Убрать из избранного':'В избранное'}" aria-pressed="${!!t.fav}">${heartSvg(t.fav)}</button>
   ${confirmDel===i?`<button class="del" data-y="${i}">Да, удалить</button><button class="ib" data-n="${i}">Отмена</button>`:openMenu===i?`<button class="del" data-d="${i}">Удалить</button>`:`<button class="ib" data-m="${i}" aria-label="Ещё">${I.more}</button>`}
  </div>`}).join('')}
+/* heart burst */
+function burst(btn){
+ if(!btn)return;btn.classList.remove('pop');void btn.offsetWidth;btn.classList.add('pop');
+ if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+ const r=btn.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,col=getComputedStyle(btn).color,N=9;
+ for(let k=0;k<N;k++){
+  const el=document.createElement('span');el.className='hb';el.style.color=col;
+  el.innerHTML='<svg viewBox="0 0 24 24"><path d="M12 21s-8-5-10-10.5A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 10 4.5C20 16 12 21 12 21z"/></svg>';
+  document.body.appendChild(el);
+  const ang=-Math.PI/2+(Math.random()-.5)*Math.PI*1.3,sp=44+Math.random()*38,sc=.6+Math.random()*.7,rot=(Math.random()-.5)*160;
+  const vx=Math.cos(ang)*sp,vy=Math.sin(ang)*sp,g=290+Math.random()*80,T=.85+Math.random()*.35,fr=[];
+  for(let j=0;j<=14;j++){const u=j/14,t=u*T*.9;
+   fr.push({transform:`translate(${cx-6+vx*t*1.4}px,${cy-6+vy*t*1.4+.5*g*t*t}px) scale(${u<.12?.3+u*5:sc*(1-u*.35)}) rotate(${rot*u}deg)`,opacity:u<.55?1:1-(u-.55)/.45,offset:u});}
+  const an=el.animate(fr,{duration:T*1000,easing:'linear'});
+  an.onfinish=()=>el.remove();
+ }
+}
 /* events */
 $('#list').onclick=e=>{
  const f=e.target.closest('[data-f]'),m=e.target.closest('[data-m]'),d=e.target.closest('[data-d]'),y=e.target.closest('[data-y]'),n=e.target.closest('[data-n]'),r=e.target.closest('.row');
- if(f){const t=tracks[+f.dataset.f];t.fav=!t.fav;put(t);render();if(+f.dataset.f===cur)drawPlayer();return}
+ if(f){const i=+f.dataset.f,t=tracks[i];t.fav=!t.fav;put(t);render();if(i===cur)drawPlayer();if(t.fav)burst(document.querySelector('#list [data-f="'+i+'"]'));return}
  if(m){openMenu=+m.dataset.m;render();return}
  if(n){confirmDel=null;openMenu=null;render();return}
  if(d){confirmDel=+d.dataset.d;openMenu=null;render();return}
@@ -933,7 +955,7 @@ $('#prev').onclick=()=>{au.currentTime>3?au.currentTime=0:step(-1)};
 $('#next').onclick=()=>step(1);
 $('#shuf').onclick=()=>{shuffle=!shuffle;drawCtl()};
 $('#rep').onclick=()=>{rep=(rep+1)%3;drawCtl()};
-$('#fav').onclick=()=>{const t=tracks[cur];if(!t)return;t.fav=!t.fav;put(t);drawPlayer();render()};
+$('#fav').onclick=()=>{const t=tracks[cur];if(!t)return;t.fav=!t.fav;put(t);drawPlayer();render();if(t.fav)burst($('#fav'))};
 $('#mini').onclick=()=>{$('#stage').dataset.view='player'};
 $('#back').onclick=()=>{$('#stage').dataset.view='lib'};
 {const w=$('#wave');
@@ -1091,5 +1113,6 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&!sm.hidden)closeSort()});
 (async()=>{tracks=await loadAll();tracks.sort((a,b)=>(a.added||a.id)-(b.added||b.id));render();drawPlayer();drawCtl()})();
 })();
 </script>
-<script>if('serviceWorker' in navigator&&!window.Capacitor)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script></body>
+<script>if('serviceWorker' in navigator&&!window.Capacitor)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script>
+</body>
 </html>
