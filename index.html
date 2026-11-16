@@ -536,10 +536,6 @@ button.asi:active,.asi.qi:active{scale:1;background:rgba(255,255,255,.16)}
 .wk i{width:100%;max-width:30px;border-radius:6px 6px 3px 3px;background:rgba(255,255,255,.3);min-height:3px}
 .wk .td i{background:#fff}
 .wk span{font-size:11px;opacity:.7}
-.wn{display:flex;gap:14px;padding:10px;align-items:flex-start}
-.wn .asic{margin-top:1px}
-.wn b{display:block;font-weight:600;font-size:15px}
-.wn small{display:block;font-size:13px;opacity:.72;line-height:1.42;margin-top:2px}
 .stp{margin:0 0 10px;font-size:14px;opacity:.8;line-height:1.45}
 @media(min-width:700px){.aso{align-items:center}.asp{border-radius:28px;border-bottom:1px solid rgba(255,255,255,.28);max-height:80dvh;padding-bottom:14px}.asp::before{display:none}.aso.top{align-items:center;padding:0}}
 @media(hover:hover) and (pointer:fine) and (min-width:900px){.chips .chip{padding:11px 18px;font-size:15px}.topr{gap:10px}}
@@ -636,7 +632,7 @@ html[data-theme=light] .wk .td i{background:#15151d}
    </a>
   </section>
   <div class="legal">
-   <nav aria-label="Документы"><button type="button" data-lg="terms">Пользовательское соглашение</button><button type="button" data-lg="privacy">Политика конфиденциальности</button><button type="button" data-lg="help">Справка</button><button type="button" id="wnBtn">Что нового</button></nav>
+   <nav aria-label="Документы"><button type="button" data-lg="terms">Пользовательское соглашение</button><button type="button" data-lg="privacy">Политика конфиденциальности</button><button type="button" data-lg="help">Справка</button></nav>
    <p>Плеер для личной музыки. Работает на вашем устройстве, ваши файлы никуда не отправляются.</p>
    <p>Все права на музыку принадлежат её правообладателям. Добавляйте только то, чем вы вправе пользоваться.</p>
    <p>© 2026 Плеер · Личный проект bert1</p>
@@ -1364,7 +1360,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&!sm.hidden)closeSort()});
 
 
 /* ================= v2: шторки, очередь, плейлисты, таймер сна, жесты, статистика ================= */
-const VER='2',RATES=[.5,.75,1,1.25,1.5,2],rateTxt=r=>String(r).replace('.',',')+'×';
+const RATES=[.5,.75,1,1.25,1.5,2],rateTxt=r=>String(r).replace('.',',')+'×';
 const WD=['вс','пн','вт','ср','чт','пт','сб'];
 const dayKey=d=>{d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(1).replace('.',',')+' ГБ':b>=1048576?Math.round(b/1048576)+' МБ':Math.max(1,Math.round(b/1024))+' КБ';
@@ -1578,17 +1574,6 @@ async function storeInfo(){const el=$('#stInfo'),bt=$('#stKeep');
 function reqPersist(){try{if(navigator.storage&&navigator.storage.persist&&!/Firefox/.test(navigator.userAgent))navigator.storage.persist().catch(()=>{})}catch(e){}}
 $('#stKeep').onclick=async()=>{let ok=false;try{ok=await navigator.storage.persist()}catch(e){}
  toast(ok?'Готово: браузер не будет сам удалять вашу музыку':'Браузер пока не разрешил. Установите плеер на главный экран и попробуйте ещё раз');storeInfo()};
-/* ---------- что нового ---------- */
-const WN=[[I.clock,'Продолжает с того же места','Плеер помнит трек и секунду, на которой вы остановились.'],
- [I.lib,'Плейлисты и подборки','Собирайте свои плейлисты кнопкой «+ Плейлист». Плеер сам составит «Микс дня», «Недавние» и «Часто слушаю».'],
- [I.queue,'Очередь «Далее»','В меню «⋯» у трека выберите «Играть следующим». Что будет играть дальше, видно по кнопке в плеере.'],
- [I.swipe,'Жесты','Смахните обложку влево или вправо, чтобы переключить трек. Двойное касание по краям перематывает на 10 секунд, по центру ставит сердечко.'],
- [I.moon,'Таймер сна и скорость','Музыка сама выключится через нужное время. Всё это в меню «⋯» в плеере.'],
- [I.disc,'Режим «Пластинка»','Обложка превращается в крутящуюся пластинку. Включается в настройках.'],
- [I.stats,'Моя статистика','Сколько вы слушали, любимые треки и серия дней. Хранится только у вас.']];
-function whatsNew(){sheet({title:'Что нового',sub:'Плеер стал удобнее',foot:'<button type="button" class="pill on big" id="wnOk">Понятно</button>',onClose:()=>LS.set('seen',VER),build:B=>{
- B.innerHTML=WN.map(([ic,t,d])=>'<div class="wn"><span class="asic">'+ic+'</span><div><b>'+t+'</b><small>'+d+'</small></div></div>').join('');$('#wnOk').onclick=closeSheet}})}
-$('#wnBtn').onclick=()=>{closeSet();whatsNew()};
 const flush=()=>{saveLast(true);stSave(true)};
 /* вернулись в библиотеку: играющий трек остаётся на виду */
 new MutationObserver(()=>{if($('#stage').dataset.view!=='lib')return;const r=$('#list .row.cur');if(r)try{r.scrollIntoView({block:'nearest'})}catch(e){}}).observe($('#stage'),{attributes:true,attributeFilter:['data-view']});
@@ -1627,7 +1612,6 @@ help:['Справка','<h5>Как добавить музыку</h5><p>В би�
  if(L&&typeof L==='object'){const i=tracks.findIndex(t=>t.id===L.id);
   if(i>=0){cur=i;anchor=L.id;const d=tracks[i].dur||0,p=+L.pos||0;pendSeek=p>2&&(!d||p<d-5)?p:0;if(typeof L.f==='string')pctx={f:L.f,s:SORTS.some(x=>x[0]===L.s)?L.s:'added'}}}
  render();drawPlayer();drawCtl();storeInfo();
- if(tracks.length&&LS.get('seen',null)!==VER)setTimeout(whatsNew,600);
 })();
 })();
 </script>
