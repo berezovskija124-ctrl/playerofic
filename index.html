@@ -553,6 +553,18 @@ html[data-theme=light] .asf input:focus{border-color:#15151d}
 html[data-theme=light] .stc{background:rgba(255,255,255,.7);border-color:rgba(20,20,40,.1)}
 html[data-theme=light] .wk i{background:rgba(20,20,40,.2)}
 html[data-theme=light] .wk .td i{background:#15151d}
+
+/* ===== v3: таймер сна на виду, плавное закрытие плеера ===== */
+.pbd button.sl-i{background:rgba(255,255,255,.12)}
+.pbd button.sl-s,.pbd button.sl-f{background:rgba(255,200,61,.24);border-color:rgba(255,200,61,.7)}
+.pbd button.sl-f svg{animation:slp 2.4s ease-in-out infinite}
+@keyframes slp{50%{opacity:.3;transform:scale(.85)}}
+html[data-theme=light] .pbd button.sl-s,html[data-theme=light] .pbd button.sl-f{background:rgba(255,190,40,.38);border-color:rgba(160,110,0,.45)}
+.stage.pdrag #lib{display:flex!important;transform-origin:50% 35%;will-change:transform,opacity}
+.stage.pdrag #player{display:flex!important;position:fixed;z-index:6;margin:0;will-change:transform;box-shadow:0 -12px 40px rgba(0,0,0,.35)}
+.stage.noanim #lib{animation:none!important}
+.topbar{touch-action:none}
+@media(prefers-reduced-motion:reduce){.pbd button.sl-f svg{animation:none}}
 </style>
 <link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#171830"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Плеер"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="pc-192.png">
 <link rel="icon" type="image/png" sizes="180x180" href="pc-180.png"></head>
@@ -820,21 +832,21 @@ const EQ_F=[31,62,125,250,500,1000,2000,4000,8000,16000];
 try{if(navigator.audioSession)navigator.audioSession.type='playback'}catch(e){}
 function makeEngine(){
  const el=new Audio(),E={onended:null,onplay:null,onpause:null,onerror:null,onloadedmetadata:null,ontimeupdate:null,onseek:null};
- let mode='el',ctx=null,gain=null,head=null,filters=[],buf=null,node=null,t0=0,off=0,playing=false,tm=null,vol=1,noVol=null,elSrc=null,eqOn=false,loop=false,rate=1,eqG=EQ_F.map(()=>0);
+ let mode='el',ctx=null,gain=null,head=null,filters=[],buf=null,node=null,t0=0,off=0,playing=false,tm=null,vol=1,noVol=null,elSrc=null,eqOn=false,loop=false,rate=1,eqG=EQ_F.map(()=>0),fade=1,force=false;
  const fire=n=>{try{if(E[n])E[n]()}catch(e){console.error(n,e)}};
  ['ended','play','pause','error','loadedmetadata','timeupdate'].forEach(n=>el.addEventListener(n,()=>{if(mode==='el')fire('on'+n)}));
  /* граф Web Audio: 10 полос эквалайзера -> громкость -> выход */
  const graph=()=>{
   ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();
   if(!gain){
-   gain=ctx.createGain();gain.gain.value=vol;gain.connect(ctx.destination);
+   gain=ctx.createGain();gain.gain.value=vol*fade;gain.connect(ctx.destination);
    filters=EQ_F.map((f,i)=>{const b=ctx.createBiquadFilter();b.type=i===0?'lowshelf':i===EQ_F.length-1?'highshelf':'peaking';b.frequency.value=f;b.Q.value=1.1;b.gain.value=eqG[i];return b});
    filters.forEach((b,i)=>b.connect(filters[i+1]||gain));head=filters[0]}
   return head};
  /* Обычный проигрыватель ведём через граф только если нужно: iOS (громкость не меняется) или включён эквалайзер */
  const routeEl=()=>{
   if(noVol===null){const o=el.volume;try{el.volume=.5}catch(e){}noVol=el.volume!==.5||/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);try{el.volume=o}catch(e){}}
-  if(elSrc||!(noVol||eqOn))return;
+  if(elSrc||!(noVol||eqOn||force))return;
   try{graph();elSrc=ctx.createMediaElementSource(el);elSrc.connect(head);try{el.volume=1}catch(e){}}
   catch(e){console.error('Audio routing:',e)}};
  const stopNode=()=>{if(node){node.onended=null;try{node.stop()}catch(e){}try{node.disconnect()}catch(e){}node=null}clearInterval(tm)};
@@ -844,6 +856,9 @@ function makeEngine(){
   const n=ctx.createBufferSource();n.buffer=buf;n.loop=loop;n.playbackRate.value=rate;n.connect(head);node=n;t0=ctx.currentTime;
   n.onended=()=>{if(node!==n)return;playing=false;stopNode();off=buf.duration;fire('onended')};
   n.start(0,off);playing=true;tm=setInterval(()=>fire('ontimeupdate'),250);fire('onplay')};
+ /* громкость = ползунок × затухание таймера сна; через Web Audio — плавно, без ступенек */
+ const applyVol=tau=>{const v=vol*fade;try{el.volume=elSrc?1:v}catch(e){}
+  if(gain&&ctx){const g=gain.gain,t=ctx.currentTime;try{g.cancelScheduledValues(t);if(tau){g.setValueAtTime(g.value,t);g.setTargetAtTime(v,t,tau)}else g.value=v}catch(e){g.value=v}}};
  Object.defineProperties(E,{
   paused:{get:()=>mode==='wa'?!playing:el.paused},
   error:{get:()=>mode==='wa'?null:el.error},
@@ -853,7 +868,8 @@ function makeEngine(){
    set:v=>{if(mode==='wa'){if(!buf)return;if(playing)startAt(v);else off=Math.max(0,Math.min(v,buf.duration))}else el.currentTime=v;fire('onseek')}},
   loop:{get:()=>loop,set:v=>{loop=!!v;el.loop=loop;if(node)node.loop=loop}},
   rate:{get:()=>rate,set:v=>{if(mode==='wa'&&playing){off=E.currentTime;t0=ctx.currentTime}rate=v;if(node)node.playbackRate.value=v;try{el.defaultPlaybackRate=v;el.playbackRate=v}catch(e){}}},
-  volume:{get:()=>vol,set:v=>{vol=v;try{el.volume=elSrc?1:v}catch(e){}if(gain)gain.gain.value=v}},
+  volume:{get:()=>vol,set:v=>{vol=v;applyVol(0)}},
+  fade:{get:()=>fade,set:f=>{fade=Math.max(0,Math.min(1,f));applyVol(.45)}},
   src:{get:()=>el.src,set:v=>{leave();el.src=v}}
  });
  E.play=()=>mode==='wa'?(buf?(playing||startAt(off),Promise.resolve()):Promise.reject(new Error('нет данных'))):(routeEl(),ctx&&ctx.state!=='running'&&ctx.resume&&ctx.resume().catch(()=>{}),el.play());
@@ -861,6 +877,8 @@ function makeEngine(){
  E.getAttribute=n=>mode==='wa'?(buf?'webaudio:':null):el.getAttribute(n);
  E.removeAttribute=n=>{leave();el.removeAttribute(n)};
  E.resume=()=>{if(ctx&&ctx.state!=='running'&&ctx.resume)ctx.resume().catch(()=>{})};
+ /* для таймера сна: звук идёт через граф Web Audio, чтобы громкость менялась плавно (и на iPhone) */
+ E.smooth=()=>{force=true;if(mode==='el'&&el.getAttribute('src')&&!el.paused)routeEl();if(ctx&&ctx.state!=='running'&&ctx.resume)ctx.resume().catch(()=>{})};
   E.setEQ=a=>{
   eqG=a.slice();eqOn=eqG.some(v=>v!==0);
   filters.forEach((b,i)=>{b.gain.value=eqG[i]});
@@ -1017,7 +1035,7 @@ let lastEnd=0;
 au.onended=()=>{const now=Date.now(),fast=now-lastEnd<700;lastEnd=now;
  /* защита от зацикливания по миллисекундам: если «конец» приходит слишком часто, просто останавливаемся */
  if(fast){au.pause();try{au.currentTime=0}catch(e){}drawCtl();return}
- if(sleepEnd){sleepEnd=false;drawBadges();drawCtl();toast('Таймер сна: музыка остановлена');return}
+ if(sleepEnd){sleepStop();return}
  if(rep===REP.ONE){lastT=-1;acc=0;counted=false;au.currentTime=0;au.play().catch(()=>{})}else if(rep===REP.OFF&&!queue.length&&atEnd()){drawCtl()}else step(1)};
 au.onplay=()=>drawCtl();
 au.onpause=()=>{lastT=-1;drawCtl();flush()};
@@ -1037,7 +1055,7 @@ function seekTo(s){const t=tracks[cur];if(!t)return;const D=au.duration||t.dur||
 const seekBy=d=>seekTo((au.getAttribute('src')?au.currentTime||0:pendSeek)+d);
 function saveLast(force){const t=tracks[cur];if(!t)return;const n=Date.now();if(!force&&n-lastSave<4000)return;lastSave=n;
  LS.set('last',{id:t.id,pos:pendSeek>0?pendSeek:(au.getAttribute('src')?au.currentTime||0:0),f:pctx?pctx.f:'all',s:pctx?pctx.s:'added'})}
-au.ontimeupdate=()=>{stTick();saveLast();if(sleepAt&&Date.now()>=sleepAt)sleepFire();if(seeking)return;
+au.ontimeupdate=()=>{stTick();saveLast();if(sleepAt||sleepEnd)sleepTick();if(seeking)return;
  const d=au.duration||tracks[cur]?.dur||0;paintPos(au.currentTime,d);posState(d)};
 /* ---------- шторка/экран блокировки: управление треком ---------- */
 const artCache=new Map();
@@ -1196,7 +1214,7 @@ $('#shuf').onclick=()=>{shuffle=!shuffle;shufIds=[];drawCtl();if(asLive)asLive()
 $('#rep').onclick=()=>{rep=(rep+1)%3;drawCtl();if(asLive)asLive()};
 $('#fav').onclick=()=>{const t=tracks[cur];if(t)favToggle(t,()=>$('#fav'))};
 $('#mini').onclick=()=>{$('#stage').dataset.view='player'};
-$('#back').onclick=()=>{$('#stage').dataset.view='lib'};
+$('#back').onclick=()=>closePlayer();
 {const w=$('#wave');
  const paint=r=>{const b=w.children,k=Math.round(r*b.length);for(let i=0;i<b.length;i++)b[i].classList.toggle('on',i<k)};
  const ratio=e=>{const r=w.getBoundingClientRect();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))};
@@ -1406,7 +1424,7 @@ function qAdd(t){if(cur<0){setCtx();play(tracks.indexOf(t));return}if(queue.incl
 function editTrack(t){ask({title:'Название и исполнитель',fields:[{label:'Название',value:t.title},{label:'Исполнитель',value:t.artist==='Неизвестный исполнитель'?'':t.artist,ph:'Неизвестный исполнитель'}],done:([a,b])=>{
  t.title=a;t.artist=b||'Неизвестный исполнитель';meta[t.id]={title:t.title,artist:t.artist};LS.set('meta',meta);render();if(tracks[cur]===t)drawPlayer();toast('Сохранено')}})}
 function removeTrack(t){const i=tracks.indexOf(t);if(i<0)return;rm(t.id);URL.revokeObjectURL(urls[t.id]);delete urls[t.id];
- if(i===cur){au.pause();au.removeAttribute('src');cur=-1;pendSeek=0;$('#mini').hidden=true;drawPlayer();LS.set('last',null);$('#stage').dataset.view='lib'}else if(i<cur)cur--;
+ if(i===cur){au.pause();au.removeAttribute('src');cur=-1;pendSeek=0;$('#mini').hidden=true;drawPlayer();LS.set('last',null);closePlayer()}else if(i<cur)cur--;
  tracks.splice(i,1);queue=queue.filter(x=>x!==t.id);pls.forEach(p=>{p.ids=p.ids.filter(x=>x!==t.id)});delete meta[t.id];LS.set('meta',meta);plSave();qSave();favSave();render();drawCtl();toast('Трек удалён')}
 function trackMenu(t,inPlayer){if(!t)return;const pl=inPlayer?null:curPl();
  sheet({title:t.title,sub:t.artist,thumb:thS(t),items:[
@@ -1425,7 +1443,7 @@ function trackMenu(t,inPlayer){if(!t)return;const pl=inPlayer?null:curPl();
 function playerMenu(){const t=tracks[cur];if(t){trackMenu(t,true);return}
  sheet({title:'Плеер',sub:'Сначала выберите трек',items:[
   {icon:I.disc,label:'Режим «Пластинка»',right:vinyl?'Вкл':'Выкл',act:()=>setVinyl(!vinyl)},
-  {icon:I.lib,label:'Открыть библиотеку',act:()=>{$('#stage').dataset.view='lib'}}]})}
+  {icon:I.lib,label:'Открыть библиотеку',act:()=>closePlayer()}]})}
 /* ---------- плейлисты ---------- */
 const curPl=()=>filter.startsWith('pl:')?pls.find(p=>p.id===filter.slice(3))||null:null;
 function setFilter(f){filter=f;render();$('#list').scrollTop=0;const on=$('#chips .on');if(on&&on.scrollIntoView)try{on.scrollIntoView({inline:'nearest',block:'nearest'})}catch(e){}}
@@ -1473,14 +1491,26 @@ function openQueue(){const draw=lv=>{const up=upNext(),t=tracks[cur],nq=up.filte
  const live=()=>{draw(true);asLive=live};
  draw(false);asLive=live}
 /* ---------- таймер сна, скорость, вид ---------- */
-function sleepLabel(){return sleepEnd?'Остановлю после этого трека':sleepAt?'Осталось '+fmt(Math.max(0,(sleepAt-Date.now())/1000)):''}
-function setSleep(m){clearInterval(sleepTm);sleepTm=null;sleepAt=0;sleepEnd=false;
- if(m==='end')sleepEnd=true;else if(m>0){sleepAt=Date.now()+m*6e4;sleepTm=setInterval(()=>{if(Date.now()>=sleepAt)sleepFire();else drawBadges()},1000)}
- drawBadges();drawCtl();toast(m==='end'?'Остановлю музыку после этого трека':m>0?'Музыка выключится через '+m+' мин':'Таймер сна выключен')}
-function sleepFire(){clearInterval(sleepTm);sleepTm=null;sleepAt=0;drawBadges();if(au.paused)return;
- const v0=au.volume;let k=0;const f=setInterval(()=>{k++;au.volume=Math.max(0,v0*(1-k/16));if(k>=16){clearInterval(f);au.pause();au.volume=v0;toast('Таймер сна: музыка остановлена')}},180)}
-function sleepMenu(){const on=sleepAt||sleepEnd;sheet({title:'Таймер сна',sub:on?sleepLabel():'Музыка выключится сама',items:[10,20,30,45,60].map(m=>({icon:I.moon,label:m+' минут',act:()=>setSleep(m)})).concat([
- {icon:I.clock,label:'До конца трека',on:sleepEnd,right:sleepEnd?I.check:'',act:()=>setSleep('end')},
+/* таймер сна: в конце громкость очень плавно уходит в ноль (кривая по децибелам), потом пауза */
+let sleepTot=0,fading=false;
+function sleepRemain(){if(sleepAt)return(sleepAt-Date.now())/1000;if(sleepEnd){const d=au.duration;if(!d||!isFinite(d))return Infinity;return(d-(au.currentTime||0))/(rate||1)}return Infinity}
+function sleepWin(){if(sleepAt)return Math.min(60,Math.max(20,sleepTot/3));const d=au.duration;return d&&isFinite(d)?Math.max(8,Math.min(30,d*.3/(rate||1))):30}
+function sleepLabel(){if(fading)return'Музыка затихает…';return sleepEnd?'Остановлю после этого трека':sleepAt?'Осталось '+fmt(Math.max(0,sleepRemain())):''}
+function fadeReset(){fading=false;if(au.fade<1)au.fade=1}
+function sleepTick(){if(!sleepAt&&!sleepEnd)return;const r=sleepRemain();
+ if(sleepAt&&r<=0){sleepStop();return}
+ const W=sleepWin();
+ if(r<W&&!au.paused){const x=1-Math.max(0,r)/W,e=x*x*(3-2*x);fading=true;au.fade=Math.pow(10,-56*e/20)}
+ else if(fading&&r>=W)fadeReset();
+ drawBadges()}
+function sleepStop(){clearInterval(sleepTm);sleepTm=null;sleepAt=0;sleepEnd=false;
+ if(!au.paused)au.pause();setTimeout(()=>{if(!sleepAt&&!sleepEnd)fadeReset()},500);fading=false;drawBadges();drawCtl();toast('Таймер сна: музыка остановлена. Спокойной ночи')}
+function setSleep(m){clearInterval(sleepTm);sleepTm=null;sleepAt=0;sleepEnd=false;fadeReset();
+ if(m==='end')sleepEnd=true;else if(m>0){sleepAt=Date.now()+m*6e4;sleepTot=m*60}
+ if(sleepAt||sleepEnd){au.smooth();sleepTm=setInterval(sleepTick,250)}
+ drawBadges();drawCtl();toast(m==='end'?'Остановлю музыку после этого трека':m>0?'Через '+m+' мин музыка плавно затихнет':'Таймер сна выключен')}
+function sleepMenu(){const on=sleepAt||sleepEnd;sheet({title:'Таймер сна',sub:on?sleepLabel():'В конце музыка плавно затихнет',items:[10,20,30,45,60].map(m=>({icon:I.moon,label:m+' минут',act:()=>setSleep(m)})).concat([
+ {icon:I.clock,label:'До конца трека',hint:'Песня доиграет и не оборвётся',on:sleepEnd,right:sleepEnd?I.check:'',act:()=>setSleep('end')},
  on&&{icon:I.close,label:'Выключить таймер',act:()=>setSleep(0)}])})}
 function setRate(r){rate=r;au.rate=r;drawBadges();lastPos=0;posState(au.duration||0);toast(r===1?'Обычная скорость':'Скорость '+rateTxt(r))}
 function rateMenu(){sheet({title:'Скорость',sub:'Сейчас '+rateTxt(rate),items:RATES.map(r=>({icon:I.speed,label:r===1?'Обычная':rateTxt(r),on:r===rate,right:r===rate?I.check:'',act:()=>setRate(r)}))})}
@@ -1489,11 +1519,12 @@ function setVinyl(v){vinyl=!!v;LS.set('vinyl',vinyl);markVinyl();drawPlayer()}
 document.querySelectorAll('#vseg button').forEach(b=>b.onclick=()=>setVinyl(b.dataset.v==='1'));
 vinyl=LS.get('vinyl',false)===true;markVinyl();
 function drawBadges(){const b=$('#pbd');let key='',h='';
- const sl=sleepEnd?'до конца трека':sleepAt?fmt(Math.max(0,(sleepAt-Date.now())/1000)):'';
- if(sl){key+='s';h+='<button type="button" data-b="sleep" aria-label="Таймер сна">'+I.moon+'<span id="pbS">'+sl+'</span></button>'}
+ const sl=sleepEnd?'до конца трека':sleepAt?fmt(Math.max(0,(sleepAt-Date.now())/1000)):'',sk=sl?(fading?'f':'s'):'i';
+ const st=fading?'Затихает'+(sleepAt?' · '+sl:''):(sl||'Таймер сна');
+ key+=sk;h+='<button type="button" data-b="sleep" class="sl sl-'+sk+'" aria-label="Таймер сна">'+I.moon+'<span id="pbS">'+st+'</span></button>';
  if(rate!==1){key+='r'+rate;h+='<button type="button" data-b="rate" aria-label="Скорость">'+I.speed+'<span>'+rateTxt(rate)+'</span></button>'}
  if(queue.length){key+='q'+queue.length;h+='<button type="button" data-b="queue">'+I.queue+'<span>В очереди: '+queue.length+'</span></button>'}
- if(b._k!==key){b._k=key;b.innerHTML=h}else if(sl){const s=$('#pbS');if(s)s.textContent=sl}
+ if(b._k!==key){b._k=key;b.innerHTML=h}else{const s=$('#pbS');if(s&&s.textContent!==st)s.textContent=st}
  $('#qBtn').dataset.n=queue.length||''}
 $('#pbd').onclick=e=>{const b=e.target.closest('[data-b]');if(!b)return;({sleep:sleepMenu,rate:rateMenu,queue:openQueue})[b.dataset.b]()};
 $('#qBtn').onclick=openQueue;$('#moreBtn').onclick=playerMenu;
@@ -1501,21 +1532,63 @@ $('#qBtn').onclick=openQueue;$('#moreBtn').onclick=playerMenu;
 let preMute=null;
 function setVol(v){v=Math.max(0,Math.min(1,Math.round(v*100)/100));au.volume=v;$('#vol').value=v;try{localStorage.setItem('vol',String(v))}catch(_){}}
 function muteToggle(){if(au.volume>0){preMute=au.volume;setVol(0);toast('Звук выключен')}else{setVol(preMute||1);toast('Звук включён')}}
+/* ===== плавное закрытие плеера: плеер едет вниз за пальцем, под ним проступает библиотека ===== */
+const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const PD={on:false,h:0};
+function pdStart(){const st=$('#stage'),pl=$('#player'),lb=$('#lib');if(PD.on||st.dataset.view!=='player')return false;
+ const r=pl.getBoundingClientRect();PD.on=true;PD.h=r.height;
+ Object.assign(pl.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',transition:'none'});
+ Object.assign(lb.style,{transition:'none',transform:'scale(.94)',opacity:'.55'});
+ st.classList.add('pdrag','noanim');return true}
+function pdMove(d){if(!PD.on)return;d=Math.max(0,d);const k=Math.min(1,d/(PD.h*.7));
+ $('#player').style.transform='translateY('+d+'px)';
+ const lb=$('#lib');lb.style.transform='scale('+(.94+.06*k)+')';lb.style.opacity=String(.55+.45*k)}
+function pdEnd(close){if(!PD.on)return;const st=$('#stage'),pl=$('#player'),lb=$('#lib');
+ const T=reduceMotion?0:close?360:300,ease='cubic-bezier(.2,.8,.2,1)';
+ pl.style.transition='transform '+T+'ms '+ease;lb.style.transition='transform '+T+'ms '+ease+',opacity '+T+'ms '+ease;
+ if(close){pl.style.transform='translateY('+(PD.h+40)+'px)';lb.style.transform='none';lb.style.opacity='1'}
+ else{pl.style.transform='translateY(0)';lb.style.transform='scale(.94)';lb.style.opacity='.55'}
+ setTimeout(()=>{if(close)st.dataset.view='lib';st.classList.remove('pdrag');
+  ['left','top','width','height','transform','transition'].forEach(p=>pl.style[p]='');['transform','opacity','transition'].forEach(p=>lb.style[p]='');
+  PD.on=false},T+30)}
+function closePlayer(){const st=$('#stage');if(st.dataset.view!=='player'||PD.on)return;
+ if(reduceMotion||!pdStart()){st.dataset.view='lib';return}
+ requestAnimationFrame(()=>requestAnimationFrame(()=>pdEnd(true)))}
+new MutationObserver(()=>{const st=$('#stage');if(st.dataset.view==='player')st.classList.remove('noanim')}).observe($('#stage'),{attributes:true,attributeFilter:['data-view']});
+/* свайп вниз и по верхней панели плеера */
+{const tb=$('#player .topbar');let s=null;
+ tb.addEventListener('pointerdown',e=>{if(e.target.closest('button')||e.button>0)return;s={y:e.clientY,pd:false,ly:0,lt:performance.now(),v:0};try{tb.setPointerCapture(e.pointerId)}catch(_){}});
+ tb.addEventListener('pointermove',e=>{if(!s)return;const dy=e.clientY-s.y;if(!s.pd&&dy>8)s.pd=pdStart();if(s.pd){const n=performance.now();s.v=(dy-s.ly)/Math.max(1,n-s.lt);s.ly=dy;s.lt=n;pdMove(dy)}});
+ const fin=e=>{if(!s)return;const dy=e.clientY-s.y,pd=s.pd,v=s.v;s=null;if(pd)pdEnd(e.type!=='pointercancel'&&(dy>PD.h*.22||(dy>40&&v>.45)))};
+ tb.addEventListener('pointerup',fin);tb.addEventListener('pointercancel',fin)}
+/* ===== треки из других приложений: «Поделиться» (Android) и «Открыть с помощью» (компьютер) ===== */
+let libReadyRes;const libReady=new Promise(r=>libReadyRes=r);
+async function importInbox(){
+ let n=0;
+ try{if('caches' in window){const c=await caches.open('share-inbox'),keys=await c.keys(),files=[];
+  for(const k of keys){try{const r=await c.match(k);if(r){const b=await r.blob();files.push(new File([b],decodeURIComponent(r.headers.get('x-name')||'track'),{type:b.type||''}))}}catch(e){}try{await c.delete(k)}catch(e){}}
+  if(files.length){n=files.length;await add(files);toast('Из другого приложения: '+nTr(n))}}}catch(e){console.warn('share inbox:',e)}
+ try{const u=new URL(location.href);if(u.searchParams.has('shared')){u.searchParams.delete('shared');history.replaceState(history.state,'',u.pathname+u.search+u.hash)}}catch(e){}
+ return n}
+try{if('launchQueue' in window)launchQueue.setConsumer(async p=>{if(!p||!p.files||!p.files.length)return;await libReady;const fs=[];
+ for(const h of p.files){try{fs.push(await h.getFile())}catch(e){}}
+ if(fs.length){await add(fs);toast('Открыто: '+nTr(fs.length))}})}catch(e){}
 /* ---------- жесты: обложка, мини-плеер, долгое нажатие ---------- */
 {const cv=$('#cover'),cw=cv.querySelector('.cartw');let g=null,tap={t:0,x:0};
  const hint=(side,txt)=>{const d=$('#dt');d.textContent=txt;d.className='dt '+side;void d.offsetWidth;d.classList.add('on')};
  const back=()=>{cw.style.transition='transform .3s cubic-bezier(.2,.9,.3,1),opacity .3s';cw.style.transform='';cw.style.opacity=''};
- cv.addEventListener('pointerdown',e=>{if(e.target.closest('button')||e.button>0)return;g={x:e.clientX,y:e.clientY,t:Date.now(),ax:null};try{cv.setPointerCapture(e.pointerId)}catch(_){}});
+ cv.addEventListener('pointerdown',e=>{if(e.target.closest('button')||e.button>0)return;g={x:e.clientX,y:e.clientY,t:Date.now(),ax:null,pd:false,ly:0,lt:performance.now(),v:0};try{cv.setPointerCapture(e.pointerId)}catch(_){}});
  cv.addEventListener('pointermove',e=>{if(!g)return;const dx=e.clientX-g.x,dy=e.clientY-g.y;
   if(!g.ax&&(Math.abs(dx)>10||Math.abs(dy)>10))g.ax=Math.abs(dx)>Math.abs(dy)?'x':'y';
-  if(g.ax==='x'){cw.style.transition='none';cw.style.transform='translateX('+dx*.7+'px) rotate('+dx*.025+'deg)';cw.style.opacity=String(Math.max(.35,1-Math.abs(dx)/420))}});
- const end=e=>{if(!g)return;const dx=e.clientX-g.x,dy=e.clientY-g.y,dt=Date.now()-g.t,ax=g.ax;g=null;
+  if(g.ax==='x'){cw.style.transition='none';cw.style.transform='translateX('+dx*.7+'px) rotate('+dx*.025+'deg)';cw.style.opacity=String(Math.max(.35,1-Math.abs(dx)/420))}
+  else if(g.ax==='y'){if(!g.pd&&dy>0)g.pd=pdStart();if(g.pd){const n=performance.now();g.v=(dy-g.ly)/Math.max(1,n-g.lt);g.ly=dy;g.lt=n;pdMove(dy)}}});
+ const end=e=>{if(!g)return;const dx=e.clientX-g.x,dy=e.clientY-g.y,dt=Date.now()-g.t,ax=g.ax,pd=g.pd,v=g.v;g=null;
+  if(pd){pdEnd(e.type!=='pointercancel'&&(dy>PD.h*.22||(dy>40&&v>.45)));return}
   if(e.type==='pointercancel'){back();return}
   if(ax==='x'&&Math.abs(dx)>64&&cur>=0&&(tracks.length>1||queue.length)){const d=dx<0?1:-1;buzz(8);
    cw.style.transition='transform .16s ease-in,opacity .16s';cw.style.transform='translateX('+(-d*115)+'%)';cw.style.opacity='0';
    setTimeout(()=>{step(d);cw.style.transition='none';cw.style.transform='translateX('+(d*60)+'%)';void cw.offsetWidth;back()},170);return}
   back();
-  if(ax==='y'&&dy>90){$('#stage').dataset.view='lib';return}
   if(!ax&&dt<320){const now=Date.now(),r=cv.getBoundingClientRect(),t=tracks[cur];
    if(now-tap.t<330&&Math.abs(e.clientX-tap.x)<70){tap.t=0;if(!t)return;const u=(e.clientX-r.left)/r.width;buzz(8);
     if(u<.34){seekBy(-10);hint('l','−10 с')}else if(u>.66){seekBy(10);hint('r','+10 с')}else favToggle(t,()=>$('#fav'))}
@@ -1590,7 +1663,7 @@ new MutationObserver(()=>{if($('#stage').dataset.view!=='lib')return;const r=$('
    if(lg.classList.contains('on'))lg.classList.remove('on');
    else if(shOpen())closeSheet();
    else if(!sov.hidden)closeSet();
-   else if(st.dataset.view==='player')st.dataset.view='lib';
+   else if(st.dataset.view==='player')closePlayer();
    else{toast('Нажмите «Назад» ещё раз, чтобы выйти');return}
    if(anyOpen())arm()})}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
@@ -1600,7 +1673,7 @@ addEventListener('pagehide',flush);
 const LEGAL={
 terms:['Пользовательское соглашение','<p>Редакция от 2 ноября 2026 г. Используя плеер, вы соглашаетесь с этими условиями.</p><h5>1. Что это</h5><p>Плеер — бесплатное приложение для прослушивания ваших собственных аудиофайлов на вашем устройстве. Музыку он не предоставляет, не продаёт и не распространяет.</p><h5>2. Ваши файлы и авторские права</h5><ul><li>Вы добавляете только те файлы, которыми имеете право пользоваться (купленные, свои, лицензированные или свободные).</li><li>Ответственность за добавленные файлы и за соблюдение авторских прав лежит на вас.</li><li>Плеер не снимает защиту DRM и не скачивает музыку из интернета.</li></ul><h5>3. Хранение данных</h5><p>Файлы хранятся в памяти вашего браузера. Они могут пропасть, если вы очистите данные сайта, браузер удалит их при нехватке места или вы удалите приложение. Храните оригиналы файлов отдельно.</p><h5>4. Без гарантий</h5><p>Плеер предоставляется «как есть». Автор не гарантирует бесперебойную работу, поддержку всех форматов и устройств и не отвечает за потерю файлов или иной ущерб от использования.</p><h5>5. Обновления и изменения</h5><p>Плеер и эти условия могут меняться. Актуальная редакция всегда доступна в настройках плеера.</p><h5>6. Связь</h5><p>Вопросы и жалобы, в том числе от правообладателей, можно отправить автору в Telegram через кнопку «Написать в Telegram» в настройках.</p>'],
 privacy:['Политика конфиденциальности','<p>Редакция от 12 ноября 2026 г.</p><h5>Что мы не делаем</h5><ul><li>Нет регистрации и аккаунтов.</li><li>Мы не собираем ваши персональные данные, не ведём аналитику и не показываем рекламу.</li><li>Ваши файлы, обложки и картинки не загружаются на сервер и не передаются третьим лицам.</li></ul><h5>Что хранится на вашем устройстве</h5><p>В браузере сохраняются ваши треки с обложками, избранное, плейлисты, очередь, место, где вы остановились, громкость, тема, фон библиотеки, настройки эквалайзера и сортировка. Статистика прослушивания считается и хранится только на вашем устройстве и никуда не отправляется. Всё это нужно только для работы плеера и остаётся у вас.</p><h5>Сеть</h5><p>Для загрузки и обновления плеера браузер обращается к сайту, где он размещён (GitHub Pages). Хостинг может вести технические журналы по собственным правилам. После установки плеер работает без интернета.</p><h5>Обращение в Telegram</h5><p>Если вы пишете автору в Telegram, переписка идёт по правилам Telegram. Автор использует её только для ответа вам.</p><h5>Как удалить данные</h5><p>Удалите трек в библиотеке через меню «⋯» или очистите данные сайта в настройках браузера. Тогда всё, что плеер хранил, будет стёрто. Статистику можно сбросить отдельно в окне «Моя статистика».</p>'],
-help:['Справка','<h5>Как добавить музыку</h5><p>В библиотеке нажмите «Добавить» и выберите файлы. Можно выбрать сразу несколько.</p><h5>Как включить трек</h5><p>Нажмите на трек, он начнёт играть. Чтобы открыть полный плеер, нажмите на мини-плеер внизу.</p><h5>Избранное</h5><p>Нажмите на сердечко у трека. Подборка «Избранное» покажет только отмеченные.</p><h5>Плейлисты и подборки</h5><p>Нажмите «+ Плейлист» в строке над списком, дайте название и отметьте треки. Добавить трек можно и через его меню «⋯». Чтобы переименовать или удалить плейлист, нажмите на него ещё раз. «Микс дня», «Недавние» и «Часто слушаю» плеер собирает сам.</p><h5>Очередь</h5><p>В меню «⋯» у трека выберите «Играть следующим» или «Добавить в очередь». Что будет играть дальше, показывает кнопка со списком в плеере.</p><h5>Жесты в плеере</h5><p>Смахните обложку влево или вправо, чтобы переключить трек, вниз, чтобы вернуться в библиотеку. Двойное касание слева или справа перематывает на 10 секунд, по центру ставит сердечко. Долгое нажатие на трек открывает его меню.</p><h5>Таймер сна и скорость</h5><p>Откройте «⋯» в плеере. Таймер выключит музыку через выбранное время или после текущего трека.</p><h5>Клавиши на компьютере</h5><p>Пробел: пауза. ← и →: предыдущий и следующий трек. Shift + ← и →: перемотка на 10 секунд. ↑ и ↓ в плеере: громкость. M: звук, L: сердечко, S: перемешать, R: повтор, Q: очередь, «/»: поиск.</p><h5>Трек не играет</h5><p>Удалите его через «⋯» и добавьте заново. Если не помогло, проверьте, открывается ли файл в стандартном плеере телефона. Файлы с защитой DRM не воспроизводятся.</p><h5>Управление на экране блокировки</h5><p>На iPhone запускайте плеер с иконки на рабочем столе. На Android используйте Chrome.</p><h5>Установка</h5><p>iPhone: Safari → «Поделиться» → «На экран “Домой”». Android: меню ⋮ → «Установить приложение». Компьютер: значок установки в адресной строке Chrome или Edge.</p><h5>Связь с автором</h5><p>Кнопка «Написать в Telegram» в настройках.</p>']};
+help:['Справка','<h5>Как добавить музыку</h5><p>В библиотеке нажмите «Добавить» и выберите файлы. Можно выбрать сразу несколько. На компьютере файлы можно просто перетащить в окно.</p><h5>Из другого приложения</h5><p>Android: установите плеер на главный экран. Потом в Telegram, «Файлах» или браузере нажмите «Поделиться» у аудиофайла и выберите «Плеер» — трек сразу появится в библиотеке. Компьютер: нажмите на аудиофайл правой кнопкой → «Открыть с помощью» → «Плеер». iPhone: нажмите «Поделиться» → «Сохранить в Файлы», затем в плеере «Добавить» и выберите трек.</p><h5>Как включить трек</h5><p>Нажмите на трек, он начнёт играть. Чтобы открыть полный плеер, нажмите на мини-плеер внизу.</p><h5>Избранное</h5><p>Нажмите на сердечко у трека. Подборка «Избранное» покажет только отмеченные.</p><h5>Плейлисты и подборки</h5><p>Нажмите «+ Плейлист» в строке над списком, дайте название и отметьте треки. Добавить трек можно и через его меню «⋯». Чтобы переименовать или удалить плейлист, нажмите на него ещё раз. «Микс дня», «Недавние» и «Часто слушаю» плеер собирает сам.</p><h5>Очередь</h5><p>В меню «⋯» у трека выберите «Играть следующим» или «Добавить в очередь». Что будет играть дальше, показывает кнопка со списком в плеере.</p><h5>Жесты в плеере</h5><p>Смахните обложку влево или вправо, чтобы переключить трек, вниз, чтобы вернуться в библиотеку. Двойное касание слева или справа перематывает на 10 секунд, по центру ставит сердечко. Долгое нажатие на трек открывает его меню.</p><h5>Таймер сна</h5><p>В плеере нажмите «Таймер сна» под названием трека и выберите время. В последнюю минуту музыка очень плавно затихнет и выключится. Вариант «До конца трека» дождётся, пока песня доиграет. Пока таймер включён, там же видно, сколько осталось.</p><h5>Скорость</h5><p>Откройте «⋯» в плеере и выберите скорость от 0,5× до 2×.</p><h5>Клавиши на компьютере</h5><p>Пробел: пауза. ← и →: предыдущий и следующий трек. Shift + ← и →: перемотка на 10 секунд. ↑ и ↓ в плеере: громкость. M: звук, L: сердечко, S: перемешать, R: повтор, Q: очередь, «/»: поиск.</p><h5>Трек не играет</h5><p>Удалите его через «⋯» и добавьте заново. Если не помогло, проверьте, открывается ли файл в стандартном плеере телефона. Файлы с защитой DRM не воспроизводятся.</p><h5>Управление на экране блокировки</h5><p>На iPhone запускайте плеер с иконки на рабочем столе. На Android используйте Chrome.</p><h5>Установка</h5><p>iPhone: Safari → «Поделиться» → «На экран “Домой”». Android: меню ⋮ → «Установить приложение». Компьютер: значок установки в адресной строке Chrome или Edge.</p><h5>Связь с автором</h5><p>Кнопка «Написать в Telegram» в настройках.</p>']};
 (()=>{const o=$('#lg');
  const close=()=>{o.classList.remove('on')};
  document.addEventListener('click',e=>{const b=e.target.closest('[data-lg]');if(b){const d=LEGAL[b.dataset.lg];$('#lgT').textContent=d[0];$('#lgB').innerHTML=d[1];o.classList.add('on');o.querySelector('.lgp').scrollTop=0;return}
@@ -1612,6 +1685,7 @@ help:['Справка','<h5>Как добавить музыку</h5><p>В би�
  if(L&&typeof L==='object'){const i=tracks.findIndex(t=>t.id===L.id);
   if(i>=0){cur=i;anchor=L.id;const d=tracks[i].dur||0,p=+L.pos||0;pendSeek=p>2&&(!d||p<d-5)?p:0;if(typeof L.f==='string')pctx={f:L.f,s:SORTS.some(x=>x[0]===L.s)?L.s:'added'}}}
  render();drawPlayer();drawCtl();storeInfo();
+ libReadyRes();importInbox();
 })();
 })();
 </script>
